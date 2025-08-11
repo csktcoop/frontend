@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en" x-data="{ tab: 'copy', settingsOpen: false, settingsLoading: false }">
+<head>
+  <meta charset="UTF-8">
+  <title>MFP Device UI</title>
+  <style>
+    :root {
+      --bg: #f0f4f8;
+      --tab-bg: #ddd;
+      --panel-bg: #fff;
+      --text: #000;
+      --setting-text: #555;
+    }
+    .dark {
+      --bg: #121212;
+      --tab-bg: #000;
+      --panel-bg: #000;
+      --text: #eee;
+      --setting-text: #bbb;
+    }
+    body {
+      font-family: Arial, sans-serif;
+      background: #f0f4f8;
+      padding: 1rem;
+      max-width: 1024px;
+      max-height: 768px;
+      margin: auto;
+      font-family: 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      transition: background 1s ease;
+    }
+    .danger {
+      background-color: #f8d7da;
+      border-left: .25rem solid #dc3545;
+      color: #58151c;
+      font-weight: 700;
+      padding: .25rem .5rem;
+    }
+    .warning {
+      background-color: #fff3cd;
+      border-left: .25rem solid #ffc107;
+      color: #664d03;
+      font-weight: 700;
+      padding: .25rem .5rem;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .tabs,
+    .settings-panel {
+      display: flex;
+      overflow-x: auto;
+      scrollbar-color: #8b8b8b var(--tab-bg);
+      scroll-snap-type: x mandatory;
+    }
+    .tab {
+      flex: 0 0 auto;
+      /* scroll-snap-align: center; */
+      color: var(--text);
+      background: var(--tab-bg);
+      max-width: 7.25rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      padding: 1rem 1.25rem;
+      border: none;
+      cursor: pointer;
+    }
+    .tab.active {
+      background: #4285f4;
+      color: white;
+      transition: transform 0.3s ease;
+    }
+    .panel {
+      padding: .75rem 1rem;
+      background: var(--panel-bg);
+    }
+    .settings-panel {
+      margin-top: 1rem;
+    }
+    .settings-toggle,
+    .dark-mode-toggle {
+      padding: .25rem .5rem;
+      cursor: pointer;
+      color: var(--setting-text);
+    }
+    .dark-mode-toggle {
+      margin-left: auto;
+    }
+    .settings {
+      background: var(--panel-bg);
+      padding: 1rem;
+    }
+  </style>
+</head>
+<body x-init="init()" x-data="mfpUI()">
+  <!-- Admin Unlock -->
+  <div x-show="!authenticated">
+    <button @click="scanQR()">🔒 Scan QR to Unlock</button>
+  </div>
+
+  <!-- Admin Panel -->
+  <div x-show="!authenticated" class="login-panel">
+    <input x-model="password" type="password" placeholder="Admin Password">
+    <button @click="login()">Login</button>
+  </div>
+
+  <!-- Main UI -->
+  <template x-if="authenticated">
+    <div>
+      <!-- Messages -->
+      <div x-show="paperJam" class="danger">⛔ Paper Jammed!</div>
+      <div x-show="tonerLow" class="warning">⚠️ Low Toner!</div>
+
+      <!-- Tabs -->
+      <div class="tabs" @touchstart="swipeStart($event)" @touchend="swipeEnd($event)">
+        <button class="tab" :class="{ active: tab === 'copy' }" @click="playAudio('copy'); tab = 'copy'">📄 Copy</button>
+        <button class="tab" :class="{ active: tab === 'scan' }" @click="playAudio('scan'); tab = 'scan'">🔍 Scan</button>
+        <button class="tab" :class="{ active: tab === 'print' }" @click="playAudio('print'); tab = 'print'">🖨️ Print</button>
+        <button class="tab">General tab 1</button>
+        <button class="tab">General tab 2</button>
+        <button class="tab">General tab 3</button>
+        <button class="tab">General tab 4</button>
+        <button class="tab">General tab 5</button>
+        <button class="tab">General tab 6</button>
+        <button class="tab">General tab 7</button>
+        <button class="tab">General tab 8</button>
+        <button class="tab" title="General very long tab 9">General very long tab 9</button>
+      </div>
+
+      <!-- Panels -->
+      <div class="panel" x-show="tab === 'copy'">
+        <h2>📄 Copy</h2>
+        <p>Choose number of copies and paper size.</p>
+      </div>
+
+      <div class="panel" x-show="tab === 'scan'">
+        <h2>🔍 Scan</h2>
+        <p>Select resolution and format.</p>
+      </div>
+
+      <div class="panel" x-show="tab === 'print'">
+        <h2>🖨️ Print</h2>
+        <p>Upload file and pick print settings.</p>
+
+        <button @click="addJob(); playAudio('print')" style="padding: 1rem 1.25rem">Start Print</button>
+
+        <!-- Job Queue -->
+        <div class="job-queue">
+          <template x-for="job in jobQueue" :key="job.id">
+            <div>
+              <span x-text="job.name"></span>
+              <progress :value="job.progress" max="100"></progress>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Settings Panel -->
+      <div class="settings-panel">
+        <div class="settings-toggle" x-show="!settingsLoading" @click="if (!settingsOpen) {settingsLoading = true; setTimeout(() => settingsLoading = false, 1000)} settingsOpen = !settingsOpen">
+          ⚙️ Toggle Settings
+        </div>
+        <div class="settings-toggle" x-show="settingsLoading">⚙️ Loading Settings...</div>
+        <!-- Theme Toggle -->
+        <div class="dark-mode-toggle" @click="darkMode = !darkMode; toggleTheme()">🌙 Toggle Dark Mode</div>
+      </div>
+
+      <div class="settings" x-show="settingsOpen">
+        <p>Paper: A4 | Color: Yes | Duplex: No</p>
+      </div>
+    </div>
+  </template>
+
+  <!-- Audio Elements -->
+  <audio id="copy-sound" src="copy.mp3"></audio>
+  <audio id="scan-sound" src="scan.mp3"></audio>
+  <audio id="print-sound" src="print.mp3"></audio>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <script>
+  function mfpUI() {
+    return {
+      tab: 'copy',
+      darkMode: false,
+      password: '',
+      authenticated: false,
+      paperJam: false,
+      tonerLow: false,
+      jobQueue: [],
+      audioMap: {},
+      swipeX: 0,
+      init() {
+        this.audioMap = {
+          copy: document.getElementById('copy-sound'),
+          scan: document.getElementById('scan-sound'),
+          print: document.getElementById('print-sound')
+        };
+        const params = new URLSearchParams(window.location.search);
+        this.tonerLow = params.get('lowToner') === 'true';
+        this.paperJam = params.get('paperJam') === 'true';
+      },
+      playAudio(key) {
+        if (this.audioMap[key]) this.audioMap[key].play();
+      },
+      login() {
+        this.authenticated = true;
+      },
+      scanQR() {
+        setTimeout(() => this.login(), 1000); // Fake QR unlock delay
+      },
+      toggleTheme() {
+        document.documentElement.classList.toggle('dark', this.darkMode);
+      },
+      addJob() {
+        const job = { id: Date.now(), name: (Date.now()).toString() + " job", progress: 0 };
+        this.jobQueue.push(job);
+        this.simulateProgress(this.jobQueue.length - 1);
+      },
+      simulateProgress(index) {
+        const job = this.jobQueue[index];
+        const interval = setInterval(() => {
+          if (job.progress < 100) {
+            job.progress += 10;
+          } else {
+            if (this.jobQueue.length > 3 && this.jobQueue[0].progress >= 100) {
+              this.jobQueue.shift();
+            }
+            clearInterval(interval);
+          }
+        }, 500);
+      },
+      swipeStart(e) { this.swipeX = e.touches[0].clientX; },
+      swipeEnd(e) {
+        const diff = e.changedTouches[0].clientX - this.swipeX;
+        if (diff > 50) this.tab = 'scan';
+        else if (diff < -50) this.tab = 'print';
+      }
+    };
+  }
+  </script>
+</body>
+</html>
