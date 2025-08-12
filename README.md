@@ -1,7 +1,20 @@
-# Frontend
-For researching Frontend techonologies and practical techniques
+# Vue
+Practical Vue.js techniques
 
-## Branching
-Each tech would have its own branch. e.g.:
-- vue
-- react
+## Development
+
+### Scaffold
+```powershell
+npm create vite@latest vue -- --template vue
+cd vue && npm install
+```
+
+### Run vite watcher
+```bash
+cd vue && npm run dev
+```
+
+### Additional packages
+```bash
+npm install pinia
+```
