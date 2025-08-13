@@ -1,5 +1,16 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
+import { useFilteredProducts } from '../composables/useFilteredProducts'
+import { useProductsStore } from '../stores/products'
+
+const store = useProductsStore()
+
+onMounted(() => {
+  store.fetchProducts()
+})
+// const products = computed(() => store.items)
+// const loading = computed(() => store.loading)
+// const error = computed(() => store.error)
 
 // Mock data (replace with fetch if have time)
 const products = ref([
@@ -9,6 +20,7 @@ const products = ref([
   { id: 4, name: 'City Jacket', category: 'Apparel', price: 150, inStock: true },
   { id: 5, name: 'Everyday Tee', category: 'Apparel', price: 25, inStock: false }
 ])
+const { filters, categories, filtered } = useFilteredProducts(products)
 
 const loading = ref(false)
 const error = ref(null)
@@ -26,38 +38,24 @@ const error = ref(null)
 //   }
 // })
 
-const filters = ref({
-  search: '',
-  category: 'All',
-  inStockOnly: false,
-  sort: 'name-asc' // name-asc | name-desc | price-asc | price-desc
+// Pagination
+const page = ref(1)
+const perPage = ref(5)
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / perPage.value)))
+
+watch([filtered, perPage], () => {
+  page.value = 1 // reset when filters or perPage change
 })
 
-const categories = computed(() => {
-  const set = new Set(products.value.map(p => p.category))
-  return ['All', ...Array.from(set)]
+const paginated = computed(() => {
+  const start = (page.value - 1) * perPage.value
+  return filtered.value.slice(start, start + perPage.value)
 })
 
-const filtered = computed(() => {
-  const s = filters.value.search.trim().toLowerCase()
-  const cat = filters.value.category
-  const inStockOnly = filters.value.inStockOnly
-
-  let list = products.value.filter(p => {
-    const matchesSearch = !s || p.name.toLowerCase().includes(s)
-    const matchesCat = cat === 'All' || p.category === cat
-    const matchesStock = !inStockOnly || p.inStock
-    return matchesSearch && matchesCat && matchesStock
-  })
-
-  switch (filters.value.sort) {
-    case 'name-asc': list = list.sort((a,b) => a.name.localeCompare(b.name)); break
-    case 'name-desc': list = list.sort((a,b) => b.name.localeCompare(a.name)); break
-    case 'price-asc': list = list.sort((a,b) => a.price - b.price); break
-    case 'price-desc': list = list.sort((a,b) => b.price - a.price); break
-  }
-  return list
-})
+function toFirst() { page.value = 1 }
+function toPrev() { page.value = Math.max(1, page.value - 1) }
+function toNext() { page.value = Math.min(totalPages.value, page.value + 1) }
+function toLast() { page.value = totalPages.value }
 </script>
 
 <template>
@@ -78,30 +76,48 @@ const filtered = computed(() => {
         <option value="price-asc">Price ↑</option>
         <option value="price-desc">Price ↓</option>
       </select>
+      <label>
+        Per page:
+        <select v-model.number="perPage">
+          <option :value="1">1</option>
+          <option :value="2">2</option>
+          <option :value="5">5</option>
+          <option :value="10">10</option>
+          <option :value="20">20</option>
+        </select>
+      </label>
     </div>
 
     <div v-if="loading">Loading…</div>
     <div v-else-if="error">{{ error }}</div>
-    <table v-else border="1" cellpadding="6" cellspacing="0" style="width:100%;">
-      <thead>
-        <tr>
-          <th style="text-align:left;">Name</th>
-          <th style="text-align:left;">Category</th>
-          <th style="text-align:right;">Price</th>
-          <th style="text-align:center;">In Stock</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="p in filtered" :key="p.id">
-          <td>{{ p.name }}</td>
-          <td>{{ p.category }}</td>
-          <td style="text-align:right;">${{ p.price }}</td>
-          <td style="text-align:center;">{{ p.inStock ? '✓' : '—' }}</td>
-        </tr>
-        <tr v-if="filtered.length === 0">
-          <td colspan="4" style="text-align:center; padding:12px;">No results</td>
-        </tr>
-      </tbody>
-    </table>
+    <template v-else>
+      <table border="1" cellpadding="6" cellspacing="0" style="width:100%;">
+        <thead>
+          <tr>
+            <th style="text-align:left;">Name</th>
+            <th style="text-align:left;">Category</th>
+            <th style="text-align:right;">Price</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="p in paginated" :key="p.id">
+            <td>{{ p.name }}</td>
+            <td>{{ p.category }}</td>
+            <td style="text-align:right;">${{ p.price.toFixed(2) }}</td>
+          </tr>
+          <tr v-if="paginated.length === 0">
+            <td colspan="3" style="text-align:center;">No results</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="pagination" style="display:flex; align-items:center; gap:8px; margin-top:12px;">
+        <button @click="toFirst" :disabled="page === 1" aria-label="First page">« First</button>
+        <button @click="toPrev" :disabled="page === 1" aria-label="Previous page">‹ Prev</button>
+        <span>Page {{ page }} of {{ totalPages }}</span>
+        <button @click="toNext" :disabled="page === totalPages" aria-label="Next page">Next ›</button>
+        <button @click="toLast" :disabled="page === totalPages" aria-label="Last page">Last »</button>
+      </div>
+    </template>
   </div>
 </template>
